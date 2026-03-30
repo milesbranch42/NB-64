@@ -63,6 +63,15 @@ package rv64_pkg;
 		CSR_MSTATEEN1     = 12'h30D,
 		CSR_MSTATEEN2     = 12'h30E,
 		CSR_MSTATEEN3     = 12'h30F,
+		CSR_MNSCRATCH     = 12'h740,
+		CSR_MNEPC         = 12'h741,
+		CSR_MNCAUSE       = 12'h742,
+		CSR_MNSTATUS      = 12'h744,
+		CSR_MCYCLE        = 12'hB00,
+		CSR_MINSTRET      = 12'hB02,
+		CSR_MHPMCOUNTER   = 12'hB03,
+		CSR_MCOUNTINHIBIT = 12'h320,
+		CSR_MHPMEVENT     = 12'h323,
 
 		CSR_SSTATUS       = 12'h100,
 		CSR_SIE           = 12'h104,
@@ -85,7 +94,14 @@ package rv64_pkg;
 
 		CSR_CYCLE         = 12'hC00,
 		CSR_TIME          = 12'hC01,
-		CSR_INSTRET       = 12'hC02
+		CSR_INSTRET       = 12'hC02,
+
+		CSR_TSELECT       = 12'h7A0,
+		CSR_TCONTROL      = 12'h7A5,
+		CSR_TDATA1        = 12'h7A1,
+		CSR_TDATA2        = 12'h7A2,
+		CSR_TDATA3        = 12'h7A3,
+		CSR_MCONTEXT      = 12'h7A8
 	} csr_addr_t;
 
 	typedef enum logic [4:0] {
@@ -193,8 +209,8 @@ package rv64_pkg;
 	typedef struct packed {
 		logic            we;
 		logic [1:0]      op;
+		logic            imm_op;
 		logic [11:0]     waddr;
-		logic [XLEN-1:0] wdata;
 	} csr_ctrl_t;
 
 	typedef struct packed {
@@ -214,6 +230,7 @@ package rv64_pkg;
 	} trap_ctrl_t;
 
 	typedef struct packed {
+		logic            inst_valid;
 		logic [XLEN-1:0] pc;
 		logic [XLEN-1:0] pc_plus_4;
 		logic [31:0]     instr;
@@ -221,6 +238,7 @@ package rv64_pkg;
 	} if_id_reg_t;
 
 	typedef struct packed {
+		logic            inst_valid;
 		logic [XLEN-1:0] pc;
 		logic [XLEN-1:0] pc_plus_4;
 		logic [XLEN-1:0] imm;
@@ -238,9 +256,11 @@ package rv64_pkg;
 	} id_ex_reg_t;
 
 	typedef struct packed {
+		logic            inst_valid;
 		logic [XLEN-1:0] pc;
 		logic [XLEN-1:0] ex_result;
 		logic [XLEN-1:0] mem_wdata;
+		logic [XLEN-1:0] csr_wdata;
 		logic [4:0]      rs2_addr;
 		logic [4:0]      rd_addr;
 		mem_ctrl_t       mem_ctrl;
@@ -250,9 +270,11 @@ package rv64_pkg;
 	} ex_mem_reg_t;
 
 	typedef struct packed {
+		logic            inst_valid;
 		logic [XLEN-1:0] pc;
 		logic [XLEN-1:0] ex_result;
 		logic [XLEN-1:0] mem_result;
+		logic [XLEN-1:0] csr_wdata;
 		logic [4:0]      rd_addr;
 		logic            mem_read;
 		wb_ctrl_t        wb_ctrl;

@@ -21,22 +21,44 @@ module core #(
     logic [4:0]      rs2_addr;
     logic [XLEN-1:0] rs1_data;
     logic [XLEN-1:0] rs2_data;
+
+	logic [XLEN-1:0] csr_rdata;
+	logic            csr_fault;
+
+	logic [XLEN-1:0] mepc;
+	logic [XLEN-1:0] sepc;
+	logic [1:0]      priv;
+	logic            mstatus_tsr;
+	logic            mstatus_tvm;
+
 	logic            id_uses_rs1;
 	logic            id_uses_rs2;
 	logic            id_is_store;
-    
+    logic            id_csr_re;
+	logic            id_csr_we_intent;
+	logic [11:0]     id_csr_raddr;
 	logic            wb_is_fencei;
 	logic            wb_is_mret;
 	logic            wb_is_sret;
+	logic            wb_is_valid;
 	logic            wb_csr_we;
+	logic [11:0]     wb_csr_waddr;
+	logic [XLEN-1:0] wb_csr_wdata;
 	logic            wb_trap_valid;
+	logic [4:0]      wb_trap_cause;
+	logic [XLEN-1:0] wb_trap_tval;
+	logic [XLEN-1:0] wb_trap_pc;
+	logic [XLEN-1:0] wb_pc_plus_4;
 
     logic            rf_we;
     logic [4:0]      rf_waddr;
     logic [XLEN-1:0] rf_wdata;
 
+	logic            ex_pc_redirect;
     logic            pc_redirect;
+	logic [XLEN-1:0] ex_pc_target;
     logic [XLEN-1:0] pc_target;
+	logic [XLEN-1:0] trap_pc_target;
 
 	logic [1:0]      ex_forward_a;
 	logic [1:0]      ex_forward_b;
@@ -74,19 +96,27 @@ module core #(
     id_stage #(
         .XLEN     (XLEN)
 	) u_id_stage (
-        .clk      (clk),
-        .rst      (rst),
-        .stall    (id_ex_stall),
-        .flush    (id_ex_flush),
-        .if_id    (if_id),
-        .rs1_addr (rs1_addr),
-        .rs2_addr (rs2_addr),
-        .rs1_data (rs1_data),
-        .rs2_data (rs2_data),
-		.uses_rs1 (id_uses_rs1),
-		.uses_rs2 (id_uses_rs2),
-		.is_store (id_is_store),
-        .id_ex    (id_ex)
+        .clk           (clk),
+        .rst           (rst),
+        .stall         (id_ex_stall),
+        .flush         (id_ex_flush),
+        .if_id         (if_id),
+        .rs1_addr      (rs1_addr),
+        .rs2_addr      (rs2_addr),
+        .rs1_data      (rs1_data),
+        .rs2_data      (rs2_data),
+		.csr_re        (id_csr_re),
+		.csr_we_intent (id_csr_we_intent),
+		.csr_raddr     (id_csr_raddr),
+		.csr_rdata     (csr_rdata),
+		.csr_fault     (csr_fault),
+		.csr_priv      (priv),
+		.mstatus_tsr   (mstatus_tsr),
+		.mstatus_tvm   (mstatus_tvm),
+		.uses_rs1      (id_uses_rs1),
+		.uses_rs2      (id_uses_rs2),
+		.is_store      (id_is_store),
+        .id_ex         (id_ex)
     );
 
     ex_stage #(
@@ -101,8 +131,8 @@ module core #(
 		.forward_b       (ex_forward_b),
 		.fwd_ex_mem_data (ex_mem.ex_result),
 		.fwd_mem_wb_data (rf_wdata),
-		.pc_redirect     (pc_redirect),
-		.pc_target       (pc_target),
+		.pc_redirect     (ex_pc_redirect),
+		.pc_target       (ex_pc_target),
         .ex_mem          (ex_mem)
     );
 
@@ -134,11 +164,18 @@ module core #(
 		.is_fencei  (wb_is_fencei),
 		.is_mret    (wb_is_mret),
 		.is_sret    (wb_is_sret),
+		.is_valid   (wb_is_valid),
 		.csr_we     (wb_csr_we),
+		.csr_waddr  (wb_csr_waddr),
+		.csr_wdata  (wb_csr_wdata),
 		.trap_valid (wb_trap_valid),
+		.trap_cause (wb_trap_cause),
+		.trap_tval  (wb_trap_tval),
+		.trap_pc    (wb_trap_pc),
         .rf_we      (rf_we),
         .rf_waddr   (rf_waddr),
-        .rf_wdata   (rf_wdata)
+        .rf_wdata   (rf_wdata),
+		.pc_plus_4  (wb_pc_plus_4)
     );
 
     regfile #(
@@ -154,6 +191,34 @@ module core #(
         .rs1_data (rs1_data),
         .rs2_data (rs2_data)
     );
+
+	csrfile #(
+		.XLEN (XLEN)
+	) u_csrfile (
+		.clk              (clk),
+		.rst              (rst),
+		.id_csr_re        (id_csr_re),
+		.id_csr_we_intent (id_csr_we_intent),
+		.id_csr_raddr     (id_csr_raddr),
+		.csr_rdata        (csr_rdata),
+		.csr_fault        (csr_fault),
+		.wb_csr_we        (wb_csr_we),
+		.wb_csr_waddr     (wb_csr_waddr),
+		.wb_csr_wdata     (wb_csr_wdata),
+		.wb_trap_valid    (wb_trap_valid),
+		.wb_trap_cause    (wb_trap_cause),
+		.wb_trap_tval     (wb_trap_tval),
+		.wb_trap_pc       (wb_trap_pc),
+		.wb_is_mret       (wb_is_mret),
+		.wb_is_sret       (wb_is_sret),
+		.wb_is_valid      (wb_is_valid),
+		.trap_pc_target   (trap_pc_target),
+		.mepc_o           (mepc),
+		.sepc_o           (sepc),
+		.priv_o           (priv),
+		.mstatus_tsr      (mstatus_tsr),
+		.mstatus_tvm      (mstatus_tvm)
+	);
 
 	forwarding_unit u_forwarding_unit (
 		.id_ex_rs1_addr   (id_ex.rs1_addr),
@@ -178,7 +243,7 @@ module core #(
 		.id_is_store    (id_is_store),
 		.ex_rd_addr     (id_ex.rd_addr),
 		.ex_is_load     (id_ex.mem_ctrl.read),
-		.ex_pc_redirect (pc_redirect),
+		.ex_pc_redirect (ex_pc_redirect),
 		.wb_is_fencei   (wb_is_fencei),
 		.wb_is_mret     (wb_is_mret),
 		.wb_is_sret     (wb_is_sret),
@@ -193,4 +258,30 @@ module core #(
 		.mem_wb_stall   (mem_wb_stall),
 		.mem_wb_flush   (mem_wb_flush)
 	);
+
+	always_comb begin
+		pc_redirect = 1'b0;
+		pc_target = '0;
+
+		if (wb_trap_valid) begin
+			pc_redirect = 1'b1;
+			pc_target = trap_pc_target;
+		end
+		else if (wb_is_mret) begin
+			pc_redirect = 1'b1;
+			pc_target = mepc;
+		end
+		else if (wb_is_sret) begin
+			pc_redirect = 1'b1;
+			pc_target = sepc;
+		end
+		else if (wb_csr_we || wb_is_fencei) begin
+			pc_redirect = 1'b1;
+			pc_target = wb_pc_plus_4;
+		end
+		else begin
+			pc_redirect = ex_pc_redirect;
+			pc_target = ex_pc_target;
+		end
+	end
 endmodule

@@ -37,6 +37,11 @@ module ex_stage #(
 
 	logic [XLEN-1:0]   final_result;
 
+	logic [XLEN-1:0]   csr_operand;
+	logic [XLEN-1:0]   csr_wdata;
+
+	trap_ctrl_t        ex_trap_ctrl;
+
 	always_comb begin
 		unique case (forward_a)
 			2'b01:   fwd_rs1_val = fwd_ex_mem_data;
@@ -60,6 +65,8 @@ module ex_stage #(
 	assign mul_ss  = $signed(op1) * $signed(op2);
 	assign mul_su  = $signed(op1) * $signed({1'b0, op2});
 	assign mul_uu  = op1 * op2;
+
+	assign csr_operand = id_ex.sys_ctrl.csr_ctrl.imm_op ? { {(XLEN-5){1'b0}}, id_ex.rs1_addr } : fwd_rs1_val;
 
 	always_comb begin
 		result   = '0;
@@ -128,8 +135,9 @@ module ex_stage #(
 	end
 
 	always_comb begin
-		pc_redirect = '0;
-		pc_target = '0;
+		pc_redirect  = '0;
+		pc_target    = '0;
+		ex_trap_ctrl = id_ex.trap_ctrl; // To pass-through old exceptions
 
 		if (id_ex.ex_ctrl.is_jump) begin
 			pc_redirect = 1'b1;
@@ -150,6 +158,18 @@ module ex_stage #(
 			pc_target = (fwd_rs1_val + id_ex.imm) & ~XLEN'(1);
 		else
 			pc_target = id_ex.pc + id_ex.imm;
+		
+		// Does not support C extension
+		if (!id_ex.trap_ctrl.valid) begin
+			if (pc_target[1:0] != 2'b00 && pc_redirect) begin
+				pc_redirect = 1'b0;
+
+				// MEPC = Control-flow instruction; TVAL = Misaligned address
+				ex_trap_ctrl.valid = 1'b1;
+				ex_trap_ctrl.cause = EXC_INSTR_ADDR_MISALIGNED;
+				ex_trap_ctrl.tval  = pc_target;
+			end
+		end
 	end
 
 	always_comb begin
@@ -161,20 +181,31 @@ module ex_stage #(
 			final_result = result;
 	end
 
+	always_comb begin
+		unique case (id_ex.sys_ctrl.csr_ctrl.op)
+			2'b01:   csr_wdata = csr_operand;
+			2'b10:   csr_wdata = id_ex.csr_rdata | csr_operand;
+			2'b11:   csr_wdata = id_ex.csr_rdata & ~csr_operand;
+			default: csr_wdata = '0;
+		endcase
+	end
+
 	always_ff @(posedge clk) begin
 		if (rst || flush) begin
 			ex_mem <= '0;
 		end
 		else if (!stall) begin
-			ex_mem.pc        <= id_ex.pc;
-			ex_mem.ex_result <= final_result;
-			ex_mem.mem_wdata <= fwd_rs2_val;
-			ex_mem.rs2_addr  <= id_ex.rs2_addr;
-			ex_mem.rd_addr   <= id_ex.rd_addr;
-			ex_mem.mem_ctrl  <= id_ex.mem_ctrl;
-			ex_mem.wb_ctrl   <= id_ex.wb_ctrl;
-			ex_mem.sys_ctrl  <= id_ex.sys_ctrl;
-			ex_mem.trap_ctrl <= id_ex.trap_ctrl;
+			ex_mem.inst_valid <= id_ex.inst_valid;
+			ex_mem.pc         <= id_ex.pc;
+			ex_mem.ex_result  <= final_result;
+			ex_mem.mem_wdata  <= fwd_rs2_val;
+			ex_mem.csr_wdata  <= csr_wdata;
+			ex_mem.rs2_addr   <= id_ex.rs2_addr;
+			ex_mem.rd_addr    <= id_ex.rd_addr;
+			ex_mem.mem_ctrl   <= id_ex.mem_ctrl;
+			ex_mem.wb_ctrl    <= id_ex.wb_ctrl;
+			ex_mem.sys_ctrl   <= id_ex.sys_ctrl;
+			ex_mem.trap_ctrl  <= ex_trap_ctrl; // Was id_ex.trap_ctrl
 		end
 	end
 endmodule

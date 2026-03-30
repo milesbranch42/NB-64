@@ -50,9 +50,11 @@ module mem_stage #(
             mem_wb <= '0;
         end
         else if (!stall) begin
+			mem_wb.inst_valid <= ex_mem.inst_valid;
             mem_wb.pc         <= ex_mem.pc;
             mem_wb.ex_result  <= ex_mem.ex_result;
             mem_wb.mem_result <= loaded_data;
+			mem_wb.csr_wdata  <= ex_mem.csr_wdata;
             mem_wb.rd_addr    <= ex_mem.rd_addr;
 			mem_wb.mem_read   <= ex_mem.mem_ctrl.read;
             mem_wb.wb_ctrl    <= ex_mem.wb_ctrl;

@@ -15,6 +15,15 @@ module id_stage #(
 	input  logic [XLEN-1:0] rs1_data,
 	input  logic [XLEN-1:0] rs2_data,
 
+	output logic            csr_re,
+	output logic            csr_we_intent,
+	output logic [11:0]     csr_raddr,
+	input  logic [XLEN-1:0] csr_rdata,
+	input  logic            csr_fault,
+	input  logic [1:0]      csr_priv,
+	input  logic            mstatus_tsr,
+	input  logic            mstatus_tvm,
+
 	output logic            uses_rs1,
 	output logic            uses_rs2,
 	output logic            is_store,
@@ -58,7 +67,7 @@ module id_stage #(
 		(opcode == OP_AUIPC)    ||
 		(opcode == OP_JAL)      ||
 		(opcode == OP_MISC_MEM) ||
-		(opcode == OP_SYSTEM && (funct3 == 3'b000 || funct3[2]))
+		(opcode == OP_SYSTEM && (funct3 == 3'b000)) // ZICSR immediate-variants encode the immediate in rs1
 	);
 	
 	assign uses_rs2 = !if_id.trap_ctrl.valid && !(
@@ -87,6 +96,10 @@ module id_stage #(
 		wb_ctrl   = '0;
 		sys_ctrl  = '0;
 		trap_ctrl = '0;
+
+		csr_re        = 1'b0;
+		csr_we_intent = 1'b0;
+		csr_raddr     = '0;
 
 		unique case (opcode)
 			OP_REG: begin
@@ -238,46 +251,85 @@ module id_stage #(
 					unique case (funct12)
 						12'h000: begin // ECALL
 							trap_ctrl.valid = 1'b1;
-							trap_ctrl.cause = EXC_M_ECALL;
+
+							unique case (csr_priv)
+								2'b00:   trap_ctrl.cause = EXC_U_ECALL;
+								2'b01:   trap_ctrl.cause = EXC_S_ECALL;
+								2'b11:   trap_ctrl.cause = EXC_M_ECALL;
+								default: trap_ctrl.cause = EXC_ILLEGAL_INSTR; // Unnecessary, but good defensive programming
+							endcase
 						end
 						12'h001: begin // EBREAK
 							trap_ctrl.valid = 1'b1;
 							trap_ctrl.cause = EXC_BREAKPOINT;
 						end
 						12'h302: begin // MRET
-							sys_ctrl.is_mret = 1'b1;
+							if (csr_priv < 2'b11) begin
+								trap_ctrl.valid = 1'b1;
+								trap_ctrl.cause = EXC_ILLEGAL_INSTR;
+								trap_ctrl.tval  = { {(XLEN-32){1'b0}}, if_id.instr };
+							end
+							else begin
+								sys_ctrl.is_mret = 1'b1;
+							end
 						end
 						12'h102: begin // SRET
-							sys_ctrl.is_sret = 1'b1;
+							if (csr_priv < 2'b01 || (csr_priv == 2'b01 && mstatus_tsr)) begin
+								trap_ctrl.valid = 1'b1;
+								trap_ctrl.cause = EXC_ILLEGAL_INSTR;
+								trap_ctrl.tval  = { {(XLEN-32){1'b0}}, if_id.instr };
+							end
+							else begin
+								sys_ctrl.is_sret = 1'b1;
+							end
+						end
+						12'h105: begin // WFI
+							// NOP
 						end
 						default: begin
-							trap_ctrl.valid = 1'b1;
-							trap_ctrl.cause = EXC_ILLEGAL_INSTR;
-							trap_ctrl.tval  = { {(XLEN-32){1'b0}}, if_id.instr };
+							if (funct7 == 7'b001001) begin // SFENCE.VMA
+								if ((csr_priv == 2'b00) || (csr_priv == 2'b01 && mstatus_tvm)) begin // Illegal in U-Mode
+									trap_ctrl.valid = 1'b1;
+									trap_ctrl.cause = EXC_ILLEGAL_INSTR;
+									trap_ctrl.tval  = { {(XLEN-32){1'b0}}, if_id.instr };
+								end
+								// Otherwise, NOP for now
+							end
+							else begin
+								trap_ctrl.valid = 1'b1;
+								trap_ctrl.cause = EXC_ILLEGAL_INSTR;
+								trap_ctrl.tval  = { {(XLEN-32){1'b0}}, if_id.instr };
+							end
 						end
 					endcase
 				end
 				else if (funct3 != 3'b100) begin // CSR Instructions
 					wb_ctrl.reg_write = 1'b1;
 
-					sys_ctrl.is_csr         = 1'b1;
-					sys_ctrl.csr_ctrl.op    = funct3[1:0];
-					sys_ctrl.csr_ctrl.waddr = imm_i[11:0];
+					sys_ctrl.is_csr          = 1'b1;
+					sys_ctrl.csr_ctrl.op     = funct3[1:0];
+					sys_ctrl.csr_ctrl.imm_op = funct3[2];
+					sys_ctrl.csr_ctrl.waddr  = imm_i[11:0];
 
-					if (funct3[2]) begin
-						sys_ctrl.csr_ctrl.wdata = { {(XLEN-5){1'b0}}, rs1_addr };
-					end
-					else begin
-						sys_ctrl.csr_ctrl.wdata = rs1_data;
-					end
+					csr_raddr = if_id.instr[31:20];
 
-					if (funct3[1:0] == 2'b01) begin
+					if (funct3[1:0] == 2'b01) begin // CSRRW*
 						sys_ctrl.csr_ctrl.we = 1'b1;
+						csr_re               = (rd_addr != 0);
+						csr_we_intent        = 1'b1;
 					end
-					else if (funct3[1:0] == 2'b10 || funct3[1:0] == 2'b11) begin
+					else if (funct3[1:0] == 2'b10 || funct3[1:0] == 2'b11) begin // CSRRS* CSRRC*
 						sys_ctrl.csr_ctrl.we = (rs1_addr != 0);
+						csr_re               = 1'b1;
+						csr_we_intent        = (rs1_addr != 0);
 					end
 					else begin
+						trap_ctrl.valid = 1'b1;
+						trap_ctrl.cause = EXC_ILLEGAL_INSTR;
+						trap_ctrl.tval  = { {(XLEN-32){1'b0}}, if_id.instr };
+					end
+
+					if (csr_fault && !trap_ctrl.valid) begin
 						trap_ctrl.valid = 1'b1;
 						trap_ctrl.cause = EXC_ILLEGAL_INSTR;
 						trap_ctrl.tval  = { {(XLEN-32){1'b0}}, if_id.instr };
@@ -311,20 +363,21 @@ module id_stage #(
 			id_ex <= '0;
 		end
 		else if (!stall) begin
-			id_ex.pc        <= if_id.pc;
-			id_ex.pc_plus_4 <= if_id.pc_plus_4;
-			id_ex.imm       <= imm;
-			id_ex.rs1_val   <= rs1_data;
-			id_ex.rs2_val   <= rs2_data;
-			id_ex.csr_rdata <= '0; // ?
-			id_ex.rs1_addr  <= rs1_addr;
-			id_ex.rs2_addr  <= rs2_addr;
-			id_ex.rd_addr   <= rd_addr;
-			id_ex.ex_ctrl   <= ex_ctrl;
-			id_ex.mem_ctrl  <= mem_ctrl;
-			id_ex.wb_ctrl   <= wb_ctrl;
-			id_ex.sys_ctrl  <= sys_ctrl;
-			id_ex.trap_ctrl <= trap_ctrl;
+			id_ex.inst_valid <= if_id.inst_valid;
+			id_ex.pc         <= if_id.pc;
+			id_ex.pc_plus_4  <= if_id.pc_plus_4;
+			id_ex.imm        <= imm;
+			id_ex.rs1_val    <= rs1_data;
+			id_ex.rs2_val    <= rs2_data;
+			id_ex.csr_rdata  <= csr_rdata;
+			id_ex.rs1_addr   <= rs1_addr;
+			id_ex.rs2_addr   <= rs2_addr;
+			id_ex.rd_addr    <= rd_addr;
+			id_ex.ex_ctrl    <= ex_ctrl;
+			id_ex.mem_ctrl   <= mem_ctrl;
+			id_ex.wb_ctrl    <= wb_ctrl;
+			id_ex.sys_ctrl   <= sys_ctrl;
+			id_ex.trap_ctrl  <= trap_ctrl;
 		end
 	end
 endmodule
