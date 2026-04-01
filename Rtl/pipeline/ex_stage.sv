@@ -40,6 +40,9 @@ module ex_stage #(
 	logic [XLEN-1:0]   csr_operand;
 	logic [XLEN-1:0]   csr_wdata;
 
+	mem_ctrl_t         ex_mem_ctrl;
+	wb_ctrl_t          ex_wb_ctrl;
+	sys_ctrl_t         ex_sys_ctrl;
 	trap_ctrl_t        ex_trap_ctrl;
 
 	always_comb begin
@@ -137,7 +140,6 @@ module ex_stage #(
 	always_comb begin
 		pc_redirect  = '0;
 		pc_target    = '0;
-		ex_trap_ctrl = id_ex.trap_ctrl; // To pass-through old exceptions
 
 		if (id_ex.ex_ctrl.is_jump) begin
 			pc_redirect = 1'b1;
@@ -159,15 +161,23 @@ module ex_stage #(
 		else
 			pc_target = id_ex.pc + id_ex.imm;
 		
+		ex_mem_ctrl  = id_ex.mem_ctrl;
+		ex_wb_ctrl   = id_ex.wb_ctrl;
+		ex_sys_ctrl  = id_ex.sys_ctrl;
+		ex_trap_ctrl = id_ex.trap_ctrl;
+		
 		// Does not support C extension
 		if (!id_ex.trap_ctrl.valid) begin
 			if (pc_target[1:0] != 2'b00 && pc_redirect) begin
-				pc_redirect = 1'b0;
 
-				// MEPC = Control-flow instruction; TVAL = Misaligned address
 				ex_trap_ctrl.valid = 1'b1;
 				ex_trap_ctrl.cause = EXC_INSTR_ADDR_MISALIGNED;
 				ex_trap_ctrl.tval  = pc_target;
+
+				pc_redirect = 1'b0;
+				ex_mem_ctrl = '0;
+				ex_wb_ctrl  = '0;
+				ex_sys_ctrl = '0;
 			end
 		end
 	end
@@ -195,17 +205,18 @@ module ex_stage #(
 			ex_mem <= '0;
 		end
 		else if (!stall) begin
-			ex_mem.inst_valid <= id_ex.inst_valid;
+			ex_mem.inst_valid <= id_ex.inst_valid && !ex_trap_ctrl.valid;
 			ex_mem.pc         <= id_ex.pc;
+			ex_mem.pc_plus_4  <= id_ex.pc_plus_4;
 			ex_mem.ex_result  <= final_result;
 			ex_mem.mem_wdata  <= fwd_rs2_val;
 			ex_mem.csr_wdata  <= csr_wdata;
 			ex_mem.rs2_addr   <= id_ex.rs2_addr;
 			ex_mem.rd_addr    <= id_ex.rd_addr;
-			ex_mem.mem_ctrl   <= id_ex.mem_ctrl;
-			ex_mem.wb_ctrl    <= id_ex.wb_ctrl;
-			ex_mem.sys_ctrl   <= id_ex.sys_ctrl;
-			ex_mem.trap_ctrl  <= ex_trap_ctrl; // Was id_ex.trap_ctrl
+			ex_mem.mem_ctrl   <= ex_mem_ctrl;
+			ex_mem.wb_ctrl    <= ex_wb_ctrl;
+			ex_mem.sys_ctrl   <= ex_sys_ctrl;
+			ex_mem.trap_ctrl  <= ex_trap_ctrl;
 		end
 	end
 endmodule

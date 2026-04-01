@@ -20,3 +20,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 - **Misaligned Instruction Traps:** Corrected an architectural bug where misaligned instruction addresses were being incorrectly detected in the IF stage. The check has been moved to the EX stage to properly trap on the faulting control-flow instruction (e.g., jumps/branches) and prevent false fetch traps.
+- **EX Stage Trap Squashing:** Fixed a bug in the EX stage where local control structs were not being properly masked upon a trap. Additionally, the pipeline now correctly clears the `inst_valid` bit whenever an instruction traps, ensuring that aborted instructions cannot artificially inflate the `minstret` counter or trigger unintended writebacks.

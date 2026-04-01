@@ -116,6 +116,7 @@ module mem_stage #(
 		mem_trap_ctrl = ex_mem.trap_ctrl;
 
 		if (amo_misaligned && !ex_mem.trap_ctrl.valid) begin
+
 			mem_trap_ctrl.valid = 1'b1;
 			mem_trap_ctrl.tval  = ex_mem.ex_result;
 			mem_trap_ctrl.cause = is_lr ? EXC_LOAD_ADDR_MISALIGNED : EXC_STORE_ADDR_MISALIGNED;
@@ -145,8 +146,9 @@ module mem_stage #(
             mem_wb <= '0;
         end
         else if (!stall) begin
-			mem_wb.inst_valid <= ex_mem.inst_valid; // Clarify naming convention
+			mem_wb.inst_valid <= ex_mem.inst_valid && !mem_trap_ctrl.valid;
             mem_wb.pc         <= ex_mem.pc;
+			mem_wb.pc_plus_4  <= ex_mem.pc_plus_4;
             mem_wb.ex_result  <= ex_mem.ex_result;
             mem_wb.mem_result <= final_mem_result;
 			mem_wb.csr_wdata  <= ex_mem.csr_wdata;

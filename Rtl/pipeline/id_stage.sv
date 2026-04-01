@@ -363,7 +363,7 @@ module id_stage #(
 			id_ex <= '0;
 		end
 		else if (!stall) begin
-			id_ex.inst_valid <= if_id.inst_valid;
+			id_ex.inst_valid <= if_id.inst_valid && !trap_ctrl.valid;
 			id_ex.pc         <= if_id.pc;
 			id_ex.pc_plus_4  <= if_id.pc_plus_4;
 			id_ex.imm        <= imm;

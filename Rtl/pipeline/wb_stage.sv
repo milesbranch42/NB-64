@@ -46,5 +46,5 @@ module wb_stage #(
 	assign rf_waddr   = mem_wb.rd_addr;
 	assign rf_wdata   = mem_wb.wb_ctrl.wb_sel ? mem_wb.mem_result : mem_wb.ex_result;
 
-	assign pc_plus_4  = mem_wb.pc + 4;
+	assign pc_plus_4  = mem_wb.pc_plus_4;
 endmodule

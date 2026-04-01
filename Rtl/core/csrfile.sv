@@ -171,7 +171,7 @@ module csrfile #(
 			if (wb_csr_we && (wb_csr_waddr == CSR_MINSTRET)) begin
 				minstret <= 64'(wb_csr_wdata);
 			end
-			else if (wb_is_valid && !wb_trap_valid && !mcountinhibit[2]) begin
+			else if (wb_is_valid && !mcountinhibit[2]) begin
 				minstret <= minstret + 1;
 			end
 		end

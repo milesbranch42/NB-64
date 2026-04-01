@@ -258,6 +258,7 @@ package rv64_pkg;
 	typedef struct packed {
 		logic            inst_valid;
 		logic [XLEN-1:0] pc;
+		logic [XLEN-1:0] pc_plus_4;
 		logic [XLEN-1:0] ex_result;
 		logic [XLEN-1:0] mem_wdata;
 		logic [XLEN-1:0] csr_wdata;
@@ -272,6 +273,7 @@ package rv64_pkg;
 	typedef struct packed {
 		logic            inst_valid;
 		logic [XLEN-1:0] pc;
+		logic [XLEN-1:0] pc_plus_4;
 		logic [XLEN-1:0] ex_result;
 		logic [XLEN-1:0] mem_result;
 		logic [XLEN-1:0] csr_wdata;
