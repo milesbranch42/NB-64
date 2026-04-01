@@ -236,27 +236,27 @@ module core #(
 	);
 
 	hazard_unit u_hazard_unit (
-		.id_rs1_addr    (rs1_addr),
-		.id_rs2_addr    (rs2_addr),
-		.id_uses_rs1    (id_uses_rs1),
-		.id_uses_rs2    (id_uses_rs2),
-		.id_is_store    (id_is_store),
-		.ex_rd_addr     (id_ex.rd_addr),
-		.ex_is_load     (id_ex.mem_ctrl.read),
-		.ex_pc_redirect (ex_pc_redirect),
-		.wb_is_fencei   (wb_is_fencei),
-		.wb_is_mret     (wb_is_mret),
-		.wb_is_sret     (wb_is_sret),
-		.wb_csr_we      (wb_csr_we),
-		.wb_trap_valid  (wb_trap_valid),
-		.if_id_stall    (if_id_stall),
-		.if_id_flush    (if_id_flush),
-		.id_ex_stall    (id_ex_stall),
-		.id_ex_flush    (id_ex_flush),
-		.ex_mem_stall   (ex_mem_stall),
-		.ex_mem_flush   (ex_mem_flush),
-		.mem_wb_stall   (mem_wb_stall),
-		.mem_wb_flush   (mem_wb_flush)
+		.id_rs1_addr       (rs1_addr),
+		.id_rs2_addr       (rs2_addr),
+		.id_uses_rs1       (id_uses_rs1),
+		.id_uses_rs2       (id_uses_rs2),
+		.id_is_store       (id_is_store),
+		.ex_rd_addr        (id_ex.rd_addr),
+		.ex_result_delayed (id_ex.wb_ctrl.wb_sel), // Was id_ex.mem_ctrl.read
+		.ex_pc_redirect    (ex_pc_redirect),
+		.wb_is_fencei      (wb_is_fencei),
+		.wb_is_mret        (wb_is_mret),
+		.wb_is_sret        (wb_is_sret),
+		.wb_csr_we         (wb_csr_we),
+		.wb_trap_valid     (wb_trap_valid),
+		.if_id_stall       (if_id_stall),
+		.if_id_flush       (if_id_flush),
+		.id_ex_stall       (id_ex_stall),
+		.id_ex_flush       (id_ex_flush),
+		.ex_mem_stall      (ex_mem_stall),
+		.ex_mem_flush      (ex_mem_flush),
+		.mem_wb_stall      (mem_wb_stall),
+		.mem_wb_flush      (mem_wb_flush)
 	);
 
 	always_comb begin

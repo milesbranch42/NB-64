@@ -111,8 +111,8 @@ package rv64_pkg;
 		EXC_BREAKPOINT            = 5'd3,
 		EXC_LOAD_ADDR_MISALIGNED  = 5'd4,
 		EXC_LOAD_ACCESS_FAULT     = 5'd5,
-		EXC_STORE_ADDR_MISALIGNED = 5'd6,
-		EXC_STORE_ACCESS_FAULT    = 5'd7,
+		EXC_STORE_ADDR_MISALIGNED = 5'd6, // Valid for AMOs
+		EXC_STORE_ACCESS_FAULT    = 5'd7, // Valid for AMOs
 		EXC_U_ECALL               = 5'd8,
 		EXC_S_ECALL               = 5'd9,
 		EXC_M_ECALL               = 5'd11,

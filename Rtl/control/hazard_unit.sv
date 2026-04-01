@@ -6,7 +6,7 @@ module hazard_unit (
 	input  logic       id_is_store,
 
 	input  logic [4:0] ex_rd_addr,
-	input  logic       ex_is_load,
+	input  logic       ex_result_delayed, // Was ex_is_load
 	input  logic       ex_pc_redirect,
 
 	input  logic       wb_is_fencei,
@@ -40,7 +40,7 @@ module hazard_unit (
 			ex_mem_flush = 1'b1;
 			mem_wb_flush = 1'b1;
 		end
-		else if (ex_is_load && (ex_rd_addr != 0) &&
+		else if (ex_result_delayed && (ex_rd_addr != 0) &&
 			   ((id_uses_rs1 && ex_rd_addr == id_rs1_addr) ||
 			    (id_uses_rs2 && ex_rd_addr == id_rs2_addr && !id_is_store))) begin
 
